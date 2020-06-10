@@ -9,7 +9,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Scanner;
 import java.util.stream.Collectors;
 import org.chocosolver.solver.Model;
@@ -40,6 +42,19 @@ public class QAP1 {
             }
         }
       return array;  
+    } 
+    
+    public HashMap<Integer, Integer> countFrequencies(int[] list) 
+    { 
+        // hashmap to store the frequency of element 
+        HashMap<Integer, Integer> hm = new HashMap<Integer, Integer>(); 
+  
+        for (int i : list) { 
+            Integer j = hm.get(i); 
+            hm.put(i, (j == null) ? 1 : j + 1); 
+        } 
+  
+       return hm;
     } 
     
     public static void main(String[] args) throws IOException{
@@ -155,7 +170,21 @@ public class QAP1 {
         
         model.allDifferent(indexes).post();
 
+        
+        HashMap<Integer, Integer> occurrences = countFrequencies(d_array);
 
+        for (Map.Entry<Integer, Integer> value : occurrences.entrySet()) { 
+            int val = value.getKey();
+            int occ = value.getValue();
+            model.count(val,variables, model.intVar(occ)).post();
+
+
+        } 
+        
+//        model.count(occ.keys[0],variables, model.intVar(occ.values[0])).post();
+//        model.co
+//       
+        
         model.scalar(variables, w_1, "=", WDSum).post();
         //System.out.println(w_1);
         Solver solver = model.getSolver();
