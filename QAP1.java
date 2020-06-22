@@ -75,9 +75,9 @@ public class QAP1 {
         // 248468 time: 4 minutes 55 seconds)
         
         System.out.println("main started");
-        QAP1 model = new QAP1();
-        model.readInstance(instanceFile);
-        model.Solve();
+        QAP1 qap = new QAP1();
+        qap.readInstance(instanceFile);
+        qap.Solve();
     }
     
     
