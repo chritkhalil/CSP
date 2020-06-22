@@ -13,10 +13,16 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.chocosolver.solver.Model;
+import org.chocosolver.solver.ParallelPortfolio;
 import org.chocosolver.solver.Solver;
+import org.chocosolver.solver.search.strategy.Search;
+import org.chocosolver.solver.search.strategy.selectors.values.IntDomainRandom;
+import org.chocosolver.solver.search.strategy.selectors.variables.FirstFail;
 import org.chocosolver.solver.variables.IntVar;
+import org.chocosolver.solver.variables.Variable;
 
 /**
  *
@@ -25,9 +31,12 @@ import org.chocosolver.solver.variables.IntVar;
 public class QAP1 {
 
     
+    private final static int TIME_LIMIT = 60;
+    
+    int maxWeightedSumValue;
+    
     int size;
     int[][] distances;
-    
     
     int[][] weights;
 
@@ -41,10 +50,10 @@ public class QAP1 {
                 array[i*matrix[i].length+j] = matrix[i][j];
             }
         }
-      return array;  
-    } 
+      return array;
+    }
     
-    public HashMap<Integer, Integer> countFrequencies(int[] list) 
+    public HashMap<Integer, Integer> CountFrequencies(int[] list) 
     { 
         // hashmap to store the frequency of element 
         HashMap<Integer, Integer> hm = new HashMap<Integer, Integer>(); 
@@ -57,12 +66,18 @@ public class QAP1 {
        return hm;
     } 
     
+    
+    
     public static void main(String[] args) throws IOException{
-        String instanceFile = "/Users/pro/Downloads/had12.dat";
+        // had12 sol = 1629
+        String instanceFile = "/Users/pro/Downloads/tai12b.dat";
+        
+        // 248468 time: 4 minutes 55 seconds)
+        
         System.out.println("main started");
         QAP1 model = new QAP1();
         model.readInstance(instanceFile);
-        model.S();
+        model.Solve();
     }
     
     
@@ -76,7 +91,6 @@ public class QAP1 {
         }
     }
 
-    
     
     
     // Reads instance data
@@ -103,103 +117,113 @@ public class QAP1 {
     }
     
     
-    void S() {
-        Model model = new Model("QAP");
+    public int[] RemoveDuplicates(int[] arr){
+        Set<Integer> set = new HashSet<Integer>();
 
-        IntVar[] variables = new IntVar[size*size];
-        int[] d_array = MatrixToArray(distances);
-        System.out.println(Arrays.toString(d_array));
-        for (int i = 0; i < size*size; i++) {
-            String varName = "X" + i;
-            variables[i] = model.intVar(varName, d_array);
+        for (int num : arr) {
+            set.add(num);
         }
 
-        int[] d_1 = new int[size];
-        int[] d_2 = new int[size * size];
-        int[] w_1 = new int[size * size];
-        for (int i = 0; i < size; i++) {
-            d_1[i] = distances[i][i];
-        }
+        return set.stream().mapToInt(Number::intValue).toArray();
+    }
 
-        int c = 0;
-        for (int i = 0; i < size; i++) {
-            for (int j = 0; j < size; j++) {
-                if (j != j) {
-                    d_2[c] = distances[i][j];
-                    c++;
-                }
-                w_1[c] = weights[i][j];
-//                if(w[i][j]>max_w)
-//                    max_w = w[i][j];
-//                if(d[i][j]>max_d)
-//                    max_d = d[i][j];
+    int getWeightedSum(int[] weights, int[] distances){
+        int maxWeightedSumValue = 0;
+        for (int i =0; i < size*size; i++) {
+            maxWeightedSumValue += distances[i]*weights[i];
+        }
+        return maxWeightedSumValue;
+    }
+    
+    int getWeightedSum(Variable[] weights, int[] distances){
+        int maxWeightedSumValue = 0;
+        for (int i =0; i < size*size; i++) {
+            maxWeightedSumValue += distances[i]*weights[i].asIntVar().getValue();
+        }
+        return maxWeightedSumValue;
+    }
+    
+    IntVar[] asIntVar(Variable[] vars){
+        IntVar[] intvars = new IntVar[size*size];
+        for (int i=0; i<vars.length;i++){
+            if( vars[i].getName().startsWith("X_")) {
+                intvars[i] = vars[i].asIntVar();
             }
         }
-        
-        IntVar WDSum = model.intVar("WDSum",0,max_d*max_w);
-//
-//        int k = 0;
-//        for (int i = 0; i < size; i++) {
-//            for (int j = 0; j < size; j++) {
-//                IntVar d_ij;
-//                if (i == j) {
-//                    d_ij = model.intVar(d_1);
-//                } else {
-//                    d_ij = model.intVar(d_2);
-//                }
-//                d_[k] = d_ij;
-//                k++;
-//            }
-//        }
-       
-        //model.allDifferent(d_).post();
+        return intvars;
+    }
+    
+    Model makeModel(int n){
+        Model model = new Model("QAP_"+n);
 
-        int[] distinct_d_array = Arrays.stream(d_array).distinct().toArray();
-        IntVar[] indexes = new IntVar[distinct_d_array.length];
-
-        System.out.println(Arrays.toString(distinct_d_array));
-        model.nValues(variables, model.intVar(distinct_d_array.length)).post();
-
-        for (int i = 0; i< size*size; i++){
-            indexes[i%distinct_d_array.length] = model.intVar(0, size*size);
-            model.element(variables[i], d_array, indexes[i%distinct_d_array.length]).post();
-            //model.element
-            //model.intvar
-            //model.element
+        IntVar[] variables = new IntVar[size*size];
+        int[] w_array = MatrixToArray(weights);
+        int[] d_array = MatrixToArray(distances);
+        for (int i = 0; i < size*size; i++) {
+            String varName = "X" + i;
+            variables[i] = model.intVar(varName, RemoveDuplicates(w_array));
+                        
+            if ( w_array[i] > max_w ) {
+                max_w = w_array[i];
+            }
+            
+            if ( d_array[i] > max_d ) {
+                max_d = d_array[i];
+            }
         }
-        
-        model.allDifferent(indexes).post();
 
         
-        HashMap<Integer, Integer> occurrences = countFrequencies(d_array);
+        maxWeightedSumValue = getWeightedSum(w_array, d_array);
+        
+       
+        //System.out.println(maxWeightedSumValue);
+        IntVar WDSum = model.intVar("WDSum",1,maxWeightedSumValue); //248543
+        model.setObjective(Model.MINIMIZE, WDSum);
+        
+        model.nValues(variables, model.intVar(RemoveDuplicates(w_array).length)).post();
+
+
+        
+        HashMap<Integer, Integer> occurrences = CountFrequencies(w_array);
 
         for (Map.Entry<Integer, Integer> value : occurrences.entrySet()) { 
             int val = value.getKey();
             int occ = value.getValue();
             model.count(val,variables, model.intVar(occ)).post();
 
-
         } 
         
-//        model.count(occ.keys[0],variables, model.intVar(occ.values[0])).post();
-//        model.co
-//       
-        
-        model.scalar(variables, w_1, "=", WDSum).post();
-        //System.out.println(w_1);
+        model.scalar(variables, d_array, "=", WDSum).post();
         Solver solver = model.getSolver();
+        solver.limitTime(TIME_LIMIT+"s");
         
-        System.out.println(solver.findSolution());
-
-
-        model.setObjective(Model.MINIMIZE, WDSum);
-        while(solver.solve()) {
-            if (WDSum.getValue()<min_wd)
-                min_wd = WDSum.getValue();
-                //System.out.println(solver.findSolution());
-        }
-        System.out.println("Minimum Weighted Distance: "+min_wd);
- 
+        return model;
         
     }
+    
+    void Solve(){
+        
+        long time = System.currentTimeMillis();
+        
+        ParallelPortfolio portfolio = new ParallelPortfolio();
+        portfolio.addModel(makeModel(0));
+        portfolio.addModel(makeModel(1));
+        portfolio.addModel(makeModel(2));
+       
+        
+        while(portfolio.solve()) {
+
+            System.out.println("Solution found (objective = "+portfolio.getBestModel().getSolver().getBestSolutionValue()+")");
+
+        }
+        
+        int runtime = (int)((System.currentTimeMillis()-time)/1000);
+        if(runtime < TIME_LIMIT) {
+            System.out.println("Optimality proved in " + runtime + "s");
+        }else{
+            System.out.println(TIME_LIMIT+"s timeout reached");
+        }
+ 
+    }
+    
 }
